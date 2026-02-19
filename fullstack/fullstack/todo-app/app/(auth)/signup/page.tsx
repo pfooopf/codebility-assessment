@@ -20,6 +20,8 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [emailChecking, setEmailChecking] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -29,6 +31,32 @@ export default function SignupPage() {
   };
 
   const strength = getStrength();
+
+  const checkEmail = async (emailToCheck: string) => {
+    if (!emailToCheck || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToCheck)) {
+      setEmailError("");
+      return;
+    }
+
+    setEmailChecking(true);
+    try {
+      const res = await fetch("/api/register/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailToCheck }),
+      });
+      const data = await res.json();
+      if (data.exists) {
+        setEmailError("This email is already registered");
+      } else {
+        setEmailError("");
+      }
+    } catch {
+      // Silently fail - let backend handle it on submit
+    } finally {
+      setEmailChecking(false);
+    }
+  };
 
   useEffect(() => {
     if (session) {
@@ -51,10 +79,16 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (emailError || emailChecking) {
+      setError("Please fix the email error before submitting");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/signup", {
+      const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
@@ -117,10 +151,24 @@ export default function SignupPage() {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (emailError) setEmailError("");
+              }}
+              onBlur={() => checkEmail(email)}
               required
-              className="mt-1 w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`mt-1 w-full px-3 py-2 border rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                emailError
+                  ? "border-red-500 dark:border-red-500"
+                  : "border-zinc-300 dark:border-zinc-700"
+              }`}
             />
+            {emailChecking && (
+              <p className="mt-1 text-xs text-zinc-500">Checking...</p>
+            )}
+            {emailError && (
+              <p className="mt-1 text-xs text-red-500">{emailError}</p>
+            )}
           </div>
 
           <div>
@@ -195,7 +243,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || emailChecking || !!emailError}
             className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Creating account..." : "Sign Up"}
